@@ -1,7 +1,17 @@
 import { Stack, StackProps, CfnOutput, Duration } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { DefinitionBody, LogLevel, Pass, StateMachine, StateMachineType } from 'aws-cdk-lib/aws-stepfunctions';
-import { GraphqlApi, SchemaFile, FieldLogLevel, AppsyncFunction, Code, FunctionRuntime, Resolver, AuthorizationType } from 'aws-cdk-lib/aws-appsync';
+import {
+    GraphqlApi,
+    SchemaFile,
+    FieldLogLevel,
+    AppsyncFunction,
+    Code,
+    FunctionRuntime,
+    Resolver,
+    AuthorizationType,
+    Definition,
+} from 'aws-cdk-lib/aws-appsync';
 import { Role, ServicePrincipal, PolicyStatement, AccountPrincipal, PolicyDocument } from 'aws-cdk-lib/aws-iam';
 import { join } from 'path';
 import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
@@ -50,7 +60,22 @@ export class SaasLegoTrackerStack extends Stack {
             },
         });
 
-        const stateMachine = new StateMachine(this, 'PutItemStateMachine', {
+        const getItemStateMachine = new StateMachine(this, 'GetItemStateMachine', {
+            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/get-item.asl.json')),
+            stateMachineType: StateMachineType.EXPRESS,
+            logs: {
+                destination: new LogGroup(this, 'GetItemStateMachineLogGroup'),
+                includeExecutionData: true,
+                level: LogLevel.ALL,
+            },
+        });
+        getItemStateMachine.addToRolePolicy(
+            new PolicyStatement({
+                resources: [`arn:aws:iam::${this.account}:role/tenant/*`], // allow all "tenant" roles by using the path to distinguish them
+                actions: ['sts:AssumeRole'],
+            }),
+        );
+        const putItemStateMachine = new StateMachine(this, 'PutItemStateMachine', {
             definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/put-item.asl.json')),
             stateMachineType: StateMachineType.EXPRESS,
             logs: {
@@ -59,7 +84,7 @@ export class SaasLegoTrackerStack extends Stack {
                 level: LogLevel.ALL,
             },
         });
-        stateMachine.addToRolePolicy(
+        putItemStateMachine.addToRolePolicy(
             new PolicyStatement({
                 resources: [`arn:aws:iam::${this.account}:role/tenant/*`], // allow all "tenant" roles by using the path to distinguish them
                 actions: ['sts:AssumeRole'],
@@ -92,7 +117,7 @@ export class SaasLegoTrackerStack extends Stack {
 
         const api = new GraphqlApi(this, 'Api', {
             name: 'SaaSLEGO',
-            schema: SchemaFile.fromAsset(join(__dirname, '../graphql/schema.graphql')),
+            definition: Definition.fromFile(join(__dirname, '../graphql/schema.graphql')),
             xrayEnabled: true,
             logConfig: {
                 excludeVerboseContent: false,
@@ -126,7 +151,40 @@ export class SaasLegoTrackerStack extends Stack {
             },
         });
 
-        stateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
+        getItemStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
+        putItemStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
+
+        const getSetFunction = new AppsyncFunction(this, 'GetSetFunction', {
+            name: 'GetSet',
+            api,
+            dataSource: httpDataSource,
+            code: Code.fromAsset(join(__dirname, '../graphql/Query.getSet.js')),
+            runtime: FunctionRuntime.JS_1_0_0,
+        });
+
+        const getItemPipelineVars = JSON.stringify({
+            STATE_MACHINE_ARN: getItemStateMachine.stateMachineArn,
+        });
+
+        new Resolver(this, 'GetSetQueryResolver', {
+            api,
+            typeName: 'Query',
+            fieldName: 'getSet',
+            code: Code.fromInline(`
+            // The before step
+            export function request(...args) {
+              console.log(args);
+              return ${getItemPipelineVars}
+            }
+
+            // The after step
+            export function response(ctx) {
+              return ctx.prev.result
+            }
+          `),
+            runtime: FunctionRuntime.JS_1_0_0,
+            pipelineConfig: [getSetFunction],
+        });
 
         const addSetFunction = new AppsyncFunction(this, 'AddSetFunction', {
             name: 'AddSet',
@@ -136,8 +194,8 @@ export class SaasLegoTrackerStack extends Stack {
             runtime: FunctionRuntime.JS_1_0_0,
         });
 
-        const pipelineVars = JSON.stringify({
-            STATE_MACHINE_ARN: stateMachine.stateMachineArn,
+        const putItemPipelineVars = JSON.stringify({
+            STATE_MACHINE_ARN: putItemStateMachine.stateMachineArn,
         });
 
         new Resolver(this, 'AddSetMutationResolver', {
@@ -148,7 +206,7 @@ export class SaasLegoTrackerStack extends Stack {
             // The before step
             export function request(...args) {
               console.log(args);
-              return ${pipelineVars}
+              return ${putItemPipelineVars}
             }
 
             // The after step

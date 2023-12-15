@@ -1,0 +1,22 @@
+{
+    "StartAt": "passState",
+    "States": {
+        "passState": {
+            "Type": "Pass",
+            "Next": "DynamoDB GetItem"
+        },
+        "DynamoDB GetItem": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::dynamodb:getItem",
+            "Parameters": {
+                "TableName": "SaaSLEGOTracker",
+                "Key.$": "$.key"
+            },
+            "End": true,
+            "Credentials": {
+                "RoleArn.$": "$.identity.resolverContext.tenantRoleArn"
+            },
+            "ResultPath": "$.output"
+        }
+    }
+}
