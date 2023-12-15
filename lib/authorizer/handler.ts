@@ -18,7 +18,7 @@ export const handler = async (event: AppSyncAuthorizerEvent, context: Context): 
     const tenantId = authTokenParts[1];
     const resolverContext = {
         tenantId: tenantId,
-        tenantRoleArn: 'arn:aws:iam::546385742337:role/Tenant1Role', // this should result in failures when the tenantId is not the correct one for tenant 1 (01HHNG3FHTRCHCRY26N72V5GQT)
+        tenantRoleArn: process.env.TENANT_1_ROLE_ARN, // this should result in failures when the tenantId is not the correct one for tenant 1 (01HHNG3FHTRCHCRY26N72V5GQT)
     };
 
     // the denied fields are all the fields that were not explicitly allowed

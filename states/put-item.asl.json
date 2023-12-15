@@ -9,13 +9,14 @@
             "Type": "Task",
             "Resource": "arn:aws:states:::dynamodb:putItem",
             "Parameters": {
-                "TableName": "SaaSLEGO",
+                "TableName": "SaaSLEGOTracker",
                 "Item.$": "$.item"
             },
             "End": true,
             "Credentials": {
                 "RoleArn.$": "$.identity.resolverContext.tenantRoleArn"
-            }
+            },
+            "ResultPath": "$.output"
         }
     }
 }
