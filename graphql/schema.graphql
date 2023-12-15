@@ -1,0 +1,17 @@
+type Set {
+    id: ID!
+    name: String!
+}
+
+input AddSet {
+    id: ID!
+    name: String!
+}
+
+type Mutation {
+    addSet(input: AddSet!): Set!
+}
+
+type Query {
+    getSet(id: ID!): Set!
+}

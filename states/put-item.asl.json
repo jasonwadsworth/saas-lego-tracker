@@ -1,0 +1,21 @@
+{
+    "StartAt": "passState",
+    "States": {
+        "passState": {
+            "Type": "Pass",
+            "Next": "DynamoDB PutItem"
+        },
+        "DynamoDB PutItem": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::dynamodb:putItem",
+            "Parameters": {
+                "TableName": "SaaSLEGO",
+                "Item.$": "$.item"
+            },
+            "End": true,
+            "Credentials": {
+                "RoleArn.$": "$.identity.resolverContext.tenantRoleArn"
+            }
+        }
+    }
+}

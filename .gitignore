@@ -1,4 +1,6 @@
 *.js
+!Mutation.*.js
+!Query.*.js
 !jest.config.js
 *.d.ts
 node_modules
