@@ -1,3 +1,12 @@
+type PageInfo {
+    nextPageKey: String
+}
+
+type SetPage {
+    items: [Set!]!
+    pageInfo: PageInfo!
+}
+
 type Set {
     id: ID!
     name: String!
@@ -14,4 +23,5 @@ type Mutation {
 
 type Query {
     getSet(id: ID!): Set!
+    listSets(nextPageKey: String): SetPage!
 }

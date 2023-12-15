@@ -1,0 +1,25 @@
+{
+    "StartAt": "passState",
+    "States": {
+        "passState": {
+            "Type": "Pass",
+            "Next": "DynamoDB Query"
+        },
+        "DynamoDB Query": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:dynamodb:query",
+            "Parameters": {
+                "TableName": "SaaSLEGOTracker",
+                "KeyConditionExpression.$": "$.KeyConditionExpression",
+                "ExclusiveStartKey.$": "$.ExclusiveStartKey",
+                "ExpressionAttributeValues.$": "$.ExpressionAttributeValues",
+                "Limit.$": "$.Limit"
+            },
+            "End": true,
+            "Credentials": {
+                "RoleArn.$": "$.identity.resolverContext.tenantRoleArn"
+            },
+            "ResultPath": "$.output"
+        }
+    }
+}

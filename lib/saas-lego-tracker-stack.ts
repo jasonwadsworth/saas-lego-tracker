@@ -90,6 +90,21 @@ export class SaasLegoTrackerStack extends Stack {
                 actions: ['sts:AssumeRole'],
             }),
         );
+        const queryStateMachine = new StateMachine(this, 'QueryStateMachine', {
+            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/query.asl.json')),
+            stateMachineType: StateMachineType.EXPRESS,
+            logs: {
+                destination: new LogGroup(this, 'QueryStateMachineLogGroup'),
+                includeExecutionData: true,
+                level: LogLevel.ALL,
+            },
+        });
+        queryStateMachine.addToRolePolicy(
+            new PolicyStatement({
+                resources: [`arn:aws:iam::${this.account}:role/tenant/*`], // allow all "tenant" roles by using the path to distinguish them
+                actions: ['sts:AssumeRole'],
+            }),
+        );
 
         const authorizerFunction = new NodejsFunction(this, 'Authorizer', {
             architecture: Architecture.ARM_64,
@@ -153,6 +168,7 @@ export class SaasLegoTrackerStack extends Stack {
 
         getItemStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
         putItemStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
+        queryStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
 
         const getSetFunction = new AppsyncFunction(this, 'GetSetFunction', {
             name: 'GetSet',
@@ -216,6 +232,38 @@ export class SaasLegoTrackerStack extends Stack {
           `),
             runtime: FunctionRuntime.JS_1_0_0,
             pipelineConfig: [addSetFunction],
+        });
+
+        const listSetsFunction = new AppsyncFunction(this, 'ListSetsFunction', {
+            name: 'ListSets',
+            api,
+            dataSource: httpDataSource,
+            code: Code.fromAsset(join(__dirname, '../graphql/Query.listSets.js')),
+            runtime: FunctionRuntime.JS_1_0_0,
+        });
+
+        const queryPipelineVars = JSON.stringify({
+            STATE_MACHINE_ARN: queryStateMachine.stateMachineArn,
+        });
+
+        new Resolver(this, 'ListSetsMutationResolver', {
+            api,
+            typeName: 'Query',
+            fieldName: 'listSets',
+            code: Code.fromInline(`
+            // The before step
+            export function request(...args) {
+              console.log(args);
+              return ${queryPipelineVars}
+            }
+
+            // The after step
+            export function response(ctx) {
+              return ctx.prev.result
+            }
+          `),
+            runtime: FunctionRuntime.JS_1_0_0,
+            pipelineConfig: [listSetsFunction],
         });
     }
 }
