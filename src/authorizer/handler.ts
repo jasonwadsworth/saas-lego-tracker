@@ -18,7 +18,9 @@ export const handler = async (event: AppSyncAuthorizerEvent, context: Context): 
     const tenantId = authTokenParts[1];
     const resolverContext = {
         tenantId: tenantId,
-        tenantRoleArn: process.env.TENANT_1_ROLE_ARN, // this should result in failures when the tenantId is not the correct one for tenant 1 (01HHNG3FHTRCHCRY26N72V5GQT)
+        // the will return tenant2's role arn if it is tenant2, and tenant1's in all other cases
+        // this means that you can see a failure by passing any value that it's either tenant1 or tenant2
+        tenantRoleArn: tenantId === '01HHQVKK2X549Q276EK0TCCVZP' ? process.env.TENANT_2_ROLE_ARN : process.env.TENANT_1_ROLE_ARN,
     };
 
     // the denied fields are all the fields that were not explicitly allowed

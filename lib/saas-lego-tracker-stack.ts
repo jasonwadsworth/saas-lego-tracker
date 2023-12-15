@@ -20,6 +20,7 @@ export class SaasLegoTrackerStack extends Stack {
         });
 
         const tenant1Id = '01HHNG3FHTRCHCRY26N72V5GQT';
+        const tenant2Id = '01HHQVKK2X549Q276EK0TCCVZP';
         const tenant1Role = new Role(this, 'Tenant1Role', {
             assumedBy: new AccountPrincipal(this.account),
             path: '/tenant/',
@@ -49,9 +50,39 @@ export class SaasLegoTrackerStack extends Stack {
                 }),
             },
         });
+        const tenant2Role = new Role(this, 'Tenant2Role', {
+            assumedBy: new AccountPrincipal(this.account),
+            path: '/tenant/',
+            roleName: `Tenant${tenant2Id}`,
+            inlinePolicies: {
+                CompanyData: new PolicyDocument({
+                    statements: [
+                        new PolicyStatement({
+                            actions: [
+                                'dynamodb:BatchGetItem',
+                                'dynamodb:BatchWriteItem',
+                                'dynamodb:ConditionCheckItem',
+                                'dynamodb:DeleteItem',
+                                'dynamodb:GetItem',
+                                'dynamodb:PutItem',
+                                'dynamodb:Query',
+                                'dynamodb:UpdateItem',
+                            ],
+                            resources: ['*'],
+                            conditions: {
+                                'ForAllValues:StringLike': {
+                                    'dynamodb:LeadingKeys': [`${tenant2Id}*`],
+                                },
+                            },
+                        }),
+                    ],
+                }),
+            },
+        });
 
         const { authorizerFunction } = new AppSyncAuthorizer(this, 'AppSyncAuthorizer', {
             tenant1Role,
+            tenant2Role,
         });
 
         const api = new GraphqlApi(this, 'Api', {

@@ -8,6 +8,7 @@ import path = require('path');
 
 interface Props {
     tenant1Role: Role;
+    tenant2Role: Role;
 }
 
 export class AppSyncAuthorizer extends Construct {
@@ -16,7 +17,7 @@ export class AppSyncAuthorizer extends Construct {
     constructor(scope: Construct, id: string, props: Props) {
         super(scope, id);
 
-        const { tenant1Role } = props;
+        const { tenant1Role, tenant2Role } = props;
 
         this.authorizerFunction = new NodejsFunction(this, 'Authorizer', {
             architecture: Architecture.ARM_64,
@@ -28,6 +29,7 @@ export class AppSyncAuthorizer extends Construct {
                 LOG_LEVEL: this.node.tryGetContext(`logLevel`) || 'INFO',
                 NODE_OPTIONS: '--enable-source-maps',
                 TENANT_1_ROLE_ARN: tenant1Role.roleArn,
+                TENANT_2_ROLE_ARN: tenant2Role.roleArn,
             },
             logRetention: RetentionDays.TWO_WEEKS,
             memorySize: 1024,
