@@ -1,23 +1,13 @@
-import { Stack, StackProps, CfnOutput, Duration } from 'aws-cdk-lib';
+import { Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { DefinitionBody, LogLevel, Pass, StateMachine, StateMachineType } from 'aws-cdk-lib/aws-stepfunctions';
-import {
-    GraphqlApi,
-    SchemaFile,
-    FieldLogLevel,
-    AppsyncFunction,
-    Code,
-    FunctionRuntime,
-    Resolver,
-    AuthorizationType,
-    Definition,
-} from 'aws-cdk-lib/aws-appsync';
+import { DefinitionBody } from 'aws-cdk-lib/aws-stepfunctions';
+import { GraphqlApi, FieldLogLevel, Code, AuthorizationType, Definition } from 'aws-cdk-lib/aws-appsync';
 import { Role, ServicePrincipal, PolicyStatement, AccountPrincipal, PolicyDocument } from 'aws-cdk-lib/aws-iam';
 import { join } from 'path';
-import { LogGroup, RetentionDays } from 'aws-cdk-lib/aws-logs';
-import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
-import { Architecture, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { AttributeType, Table } from 'aws-cdk-lib/aws-dynamodb';
+import { AppSyncToStepFunction } from './app-sync-to-step-function-construct';
+import { TenantStateMachine } from './tenant-state-machine';
+import { AppSyncAuthorizer } from '../src/authorizer/cdk-construct';
 
 export class SaasLegoTrackerStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -60,74 +50,8 @@ export class SaasLegoTrackerStack extends Stack {
             },
         });
 
-        const getItemStateMachine = new StateMachine(this, 'GetItemStateMachine', {
-            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/get-item.asl.json')),
-            stateMachineType: StateMachineType.EXPRESS,
-            logs: {
-                destination: new LogGroup(this, 'GetItemStateMachineLogGroup'),
-                includeExecutionData: true,
-                level: LogLevel.ALL,
-            },
-        });
-        getItemStateMachine.addToRolePolicy(
-            new PolicyStatement({
-                resources: [`arn:aws:iam::${this.account}:role/tenant/*`], // allow all "tenant" roles by using the path to distinguish them
-                actions: ['sts:AssumeRole'],
-            }),
-        );
-        const putItemStateMachine = new StateMachine(this, 'PutItemStateMachine', {
-            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/put-item.asl.json')),
-            stateMachineType: StateMachineType.EXPRESS,
-            logs: {
-                destination: new LogGroup(this, 'PutItemStateMachineLogGroup'),
-                includeExecutionData: true,
-                level: LogLevel.ALL,
-            },
-        });
-        putItemStateMachine.addToRolePolicy(
-            new PolicyStatement({
-                resources: [`arn:aws:iam::${this.account}:role/tenant/*`], // allow all "tenant" roles by using the path to distinguish them
-                actions: ['sts:AssumeRole'],
-            }),
-        );
-        const queryStateMachine = new StateMachine(this, 'QueryStateMachine', {
-            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/query.asl.json')),
-            stateMachineType: StateMachineType.EXPRESS,
-            logs: {
-                destination: new LogGroup(this, 'QueryStateMachineLogGroup'),
-                includeExecutionData: true,
-                level: LogLevel.ALL,
-            },
-        });
-        queryStateMachine.addToRolePolicy(
-            new PolicyStatement({
-                resources: [`arn:aws:iam::${this.account}:role/tenant/*`], // allow all "tenant" roles by using the path to distinguish them
-                actions: ['sts:AssumeRole'],
-            }),
-        );
-
-        const authorizerFunction = new NodejsFunction(this, 'Authorizer', {
-            architecture: Architecture.ARM_64,
-            awsSdkConnectionReuse: true,
-            bundling: { minify: true, sourceMap: true },
-            description: 'AppSync Customer Authorizer',
-            entry: join(__dirname, '/authorizer/handler.ts'),
-            environment: {
-                LOG_LEVEL: this.node.tryGetContext(`logLevel`) || 'INFO',
-                NODE_OPTIONS: '--enable-source-maps',
-                TENANT_1_ROLE_ARN: tenant1Role.roleArn,
-            },
-            logRetention: RetentionDays.TWO_WEEKS,
-            memorySize: 1024,
-            reservedConcurrentExecutions: 10,
-            runtime: Runtime.NODEJS_18_X,
-            timeout: Duration.seconds(3),
-            tracing: Tracing.ACTIVE,
-        });
-
-        authorizerFunction.addPermission('appsync-data-authorizer', {
-            principal: new ServicePrincipal('appsync.amazonaws.com'),
-            action: 'lambda:InvokeFunction',
+        const { authorizerFunction } = new AppSyncAuthorizer(this, 'AppSyncAuthorizer', {
+            tenant1Role,
         });
 
         const api = new GraphqlApi(this, 'Api', {
@@ -148,6 +72,14 @@ export class SaasLegoTrackerStack extends Stack {
             },
         });
 
+        const endpoint = 'https://sync-states.' + this.region + '.amazonaws.com/';
+        const httpDataSource = api.addHttpDataSource('StepFunctionsStateMachine', endpoint, {
+            authorizationConfig: {
+                signingRegion: this.region,
+                signingServiceName: 'states',
+            },
+        });
+
         const appSyncStepFunctionsRole = new Role(this, 'AppSyncStateMachineRole', {
             assumedBy: new ServicePrincipal('appsync.amazonaws.com'),
         });
@@ -158,112 +90,42 @@ export class SaasLegoTrackerStack extends Stack {
             }),
         );
 
-        const endpoint = 'https://sync-states.' + this.region + '.amazonaws.com/';
-        const httpDataSource = api.addHttpDataSource('StepFunctionsStateMachine', endpoint, {
-            authorizationConfig: {
-                signingRegion: this.region,
-                signingServiceName: 'states',
-            },
+        const { stateMachine: getItemStateMachine } = new TenantStateMachine(this, 'GetItemTenantStateMachine', {
+            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/get-item.asl.json')),
+            httpDataSource,
+        });
+        const { stateMachine: putItemStateMachine } = new TenantStateMachine(this, 'PutItemTenantStateMachine', {
+            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/put-item.asl.json')),
+            httpDataSource,
+        });
+        const { stateMachine: queryStateMachine } = new TenantStateMachine(this, 'QueryTenantStateMachine', {
+            definitionBody: DefinitionBody.fromFile(join(__dirname, '../states/query.asl.json')),
+            httpDataSource,
         });
 
-        getItemStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
-        putItemStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
-        queryStateMachine.grant(httpDataSource.grantPrincipal, 'states:StartSyncExecution');
-
-        const getSetFunction = new AppsyncFunction(this, 'GetSetFunction', {
-            name: 'GetSet',
-            api,
-            dataSource: httpDataSource,
-            code: Code.fromAsset(join(__dirname, '../graphql/Query.getSet.js')),
-            runtime: FunctionRuntime.JS_1_0_0,
+        new AppSyncToStepFunction(this, 'AddSetAppSyncToStepFunction', {
+            functionCode: Code.fromAsset(join(__dirname, '../graphql/Mutation.addSet.js')),
+            graphqlApi: api,
+            httpDataSource,
+            resolverFieldName: 'addSet',
+            resolverTypeName: 'Mutation',
+            stateMachine: putItemStateMachine,
         });
-
-        const getItemPipelineVars = JSON.stringify({
-            STATE_MACHINE_ARN: getItemStateMachine.stateMachineArn,
+        new AppSyncToStepFunction(this, 'GetSetAppSyncToStepFunction', {
+            functionCode: Code.fromAsset(join(__dirname, '../graphql/Query.getSet.js')),
+            graphqlApi: api,
+            httpDataSource,
+            resolverFieldName: 'getSet',
+            resolverTypeName: 'Query',
+            stateMachine: getItemStateMachine,
         });
-
-        new Resolver(this, 'GetSetQueryResolver', {
-            api,
-            typeName: 'Query',
-            fieldName: 'getSet',
-            code: Code.fromInline(`
-            // The before step
-            export function request(...args) {
-              console.log(args);
-              return ${getItemPipelineVars}
-            }
-
-            // The after step
-            export function response(ctx) {
-              return ctx.prev.result
-            }
-          `),
-            runtime: FunctionRuntime.JS_1_0_0,
-            pipelineConfig: [getSetFunction],
-        });
-
-        const addSetFunction = new AppsyncFunction(this, 'AddSetFunction', {
-            name: 'AddSet',
-            api,
-            dataSource: httpDataSource,
-            code: Code.fromAsset(join(__dirname, '../graphql/Mutation.addSet.js')),
-            runtime: FunctionRuntime.JS_1_0_0,
-        });
-
-        const putItemPipelineVars = JSON.stringify({
-            STATE_MACHINE_ARN: putItemStateMachine.stateMachineArn,
-        });
-
-        new Resolver(this, 'AddSetMutationResolver', {
-            api,
-            typeName: 'Mutation',
-            fieldName: 'addSet',
-            code: Code.fromInline(`
-            // The before step
-            export function request(...args) {
-              console.log(args);
-              return ${putItemPipelineVars}
-            }
-
-            // The after step
-            export function response(ctx) {
-              return ctx.prev.result
-            }
-          `),
-            runtime: FunctionRuntime.JS_1_0_0,
-            pipelineConfig: [addSetFunction],
-        });
-
-        const listSetsFunction = new AppsyncFunction(this, 'ListSetsFunction', {
-            name: 'ListSets',
-            api,
-            dataSource: httpDataSource,
-            code: Code.fromAsset(join(__dirname, '../graphql/Query.listSets.js')),
-            runtime: FunctionRuntime.JS_1_0_0,
-        });
-
-        const queryPipelineVars = JSON.stringify({
-            STATE_MACHINE_ARN: queryStateMachine.stateMachineArn,
-        });
-
-        new Resolver(this, 'ListSetsMutationResolver', {
-            api,
-            typeName: 'Query',
-            fieldName: 'listSets',
-            code: Code.fromInline(`
-            // The before step
-            export function request(...args) {
-              console.log(args);
-              return ${queryPipelineVars}
-            }
-
-            // The after step
-            export function response(ctx) {
-              return ctx.prev.result
-            }
-          `),
-            runtime: FunctionRuntime.JS_1_0_0,
-            pipelineConfig: [listSetsFunction],
+        new AppSyncToStepFunction(this, 'ListSetsAppSyncToStepFunction', {
+            functionCode: Code.fromAsset(join(__dirname, '../graphql/Query.listSets.js')),
+            graphqlApi: api,
+            httpDataSource,
+            resolverFieldName: 'listSets',
+            resolverTypeName: 'Query',
+            stateMachine: queryStateMachine,
         });
     }
 }

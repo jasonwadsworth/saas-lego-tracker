@@ -1,6 +1,8 @@
 *.js
 !Mutation.*.js
 !Query.*.js
+!*/mutations/**/app-sync-function.js
+!*/queries/**/app-sync-function.js
 !jest.config.js
 *.d.ts
 node_modules
