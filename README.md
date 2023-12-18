@@ -1,14 +1,17 @@
-# Welcome to your CDK TypeScript project
+# SaaS LEGO Tracker
 
-This is a blank project for CDK development with TypeScript.
+This project is for working with different SaaS ideas within AWS (primarily in the Serverless space).
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Current ideas:
 
-## Useful commands
+### Use Step Functions to allow direct (non-Lambda) service integrations with AppSync while still supporting data isolation strategies.
 
-* `npm run build`   compile typescript to js
-* `npm run watch`   watch for changes and compile
-* `npm run test`    perform the jest unit tests
-* `npx cdk deploy`  deploy this stack to your default AWS account/region
-* `npx cdk diff`    compare deployed stack with current state
-* `npx cdk synth`   emits the synthesized CloudFormation template
+Status: In progress
+
+Known limitations: Requires a role per tenant
+
+Outstanding work: - Implement a real authorizer - Use `esbuild` to generate the AppSync functions so we can bundle in DynamoDB unmarshalling to simplify output.
+
+### Framework for multiple account control plane that uses cross-account EventBridge messages to allow a single point of configuration for the front end.
+
+Status: Not started
