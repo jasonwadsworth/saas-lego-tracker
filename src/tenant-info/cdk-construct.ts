@@ -1,25 +1,25 @@
 import { Duration } from 'aws-cdk-lib';
-import { Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
-import { Architecture, IFunction, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
+import { HttpApi } from 'aws-cdk-lib/aws-apigatewayv2';
+import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
+import { Table } from 'aws-cdk-lib/aws-dynamodb';
+import { Architecture, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { RetentionDays } from 'aws-cdk-lib/aws-logs';
 import { Construct } from 'constructs';
 import path = require('path');
 
 interface Props {
-    tenant1Role: Role;
-    tenant2Role: Role;
+    httpApi: HttpApi;
+    table: Table;
 }
 
-export class AppSyncAuthorizer extends Construct {
-    public readonly authorizerFunction: IFunction;
-
+export class TenantInfo extends Construct {
     constructor(scope: Construct, id: string, props: Props) {
         super(scope, id);
 
-        const { tenant1Role, tenant2Role } = props;
+        const { httpApi, table } = props;
 
-        this.authorizerFunction = new NodejsFunction(this, 'Authorizer', {
+        const nodejsFunction = new NodejsFunction(this, 'TenantInfo', {
             architecture: Architecture.ARM_64,
             awsSdkConnectionReuse: true,
             bundling: { minify: true, sourceMap: true },
@@ -27,8 +27,7 @@ export class AppSyncAuthorizer extends Construct {
             environment: {
                 LOG_LEVEL: this.node.tryGetContext(`logLevel`) || 'INFO',
                 NODE_OPTIONS: '--enable-source-maps',
-                TENANT_1_ROLE_ARN: tenant1Role.roleArn,
-                TENANT_2_ROLE_ARN: tenant2Role.roleArn,
+                TABLE_NAME: table.tableName,
             },
             logRetention: RetentionDays.TWO_WEEKS,
             memorySize: 1024,
@@ -37,9 +36,8 @@ export class AppSyncAuthorizer extends Construct {
             tracing: Tracing.ACTIVE,
         });
 
-        this.authorizerFunction.addPermission('appsync-data-authorizer', {
-            principal: new ServicePrincipal('appsync.amazonaws.com'),
-            action: 'lambda:InvokeFunction',
-        });
+        table.grantReadData(nodejsFunction);
+
+        httpApi.addRoutes({ path: '/', integration: new HttpLambdaIntegration('Root', nodejsFunction) });
     }
 }

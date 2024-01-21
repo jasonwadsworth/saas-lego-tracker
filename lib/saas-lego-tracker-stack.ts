@@ -8,6 +8,7 @@ import { AttributeType, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { AppSyncToStepFunction } from './app-sync-to-step-function-construct';
 import { TenantStateMachine } from './tenant-state-machine';
 import { AppSyncAuthorizer } from '../src/authorizer/cdk-construct';
+import { CfnParameter } from 'aws-cdk-lib/aws-ssm';
 
 export class SaasLegoTrackerStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -101,6 +102,12 @@ export class SaasLegoTrackerStack extends Stack {
                     },
                 },
             },
+        });
+
+        new CfnParameter(this, 'AccountInfo', {
+            type: 'String',
+            value: JSON.stringify({ graphqlEndpoint: api.graphqlUrl }),
+            name: 'AccountInfo',
         });
 
         const endpoint = 'https://sync-states.' + this.region + '.amazonaws.com/';

@@ -28,6 +28,12 @@
     "typescript": "~5.2.2"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.490.0",
+    "@aws-sdk/client-dynamodb": "^3.490.0",
+    "@aws-sdk/client-iam": "^3.490.0",
+    "@aws-sdk/client-ssm": "^3.496.0",
+    "@aws-sdk/client-sts": "^3.496.0",
+    "@aws-sdk/lib-dynamodb": "^3.490.0",
     "aws-cdk-lib": "2.114.1",
     "constructs": "^10.0.0",
     "source-map-support": "^0.5.21"
