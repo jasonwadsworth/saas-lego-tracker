@@ -1,4 +1,5 @@
 import { Duration } from 'aws-cdk-lib';
+import { Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { Architecture, IFunction, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
@@ -7,8 +8,7 @@ import { Construct } from 'constructs';
 import path = require('path');
 
 interface Props {
-    tenant1Role: Role;
-    tenant2Role: Role;
+    tenantManagementTable: Table;
 }
 
 export class AppSyncAuthorizer extends Construct {
@@ -17,7 +17,7 @@ export class AppSyncAuthorizer extends Construct {
     constructor(scope: Construct, id: string, props: Props) {
         super(scope, id);
 
-        const { tenant1Role, tenant2Role } = props;
+        const { tenantManagementTable } = props;
 
         this.authorizerFunction = new NodejsFunction(this, 'Authorizer', {
             architecture: Architecture.ARM_64,
@@ -27,8 +27,6 @@ export class AppSyncAuthorizer extends Construct {
             environment: {
                 LOG_LEVEL: this.node.tryGetContext(`logLevel`) || 'INFO',
                 NODE_OPTIONS: '--enable-source-maps',
-                TENANT_1_ROLE_ARN: tenant1Role.roleArn,
-                TENANT_2_ROLE_ARN: tenant2Role.roleArn,
             },
             logRetention: RetentionDays.TWO_WEEKS,
             memorySize: 1024,
@@ -41,5 +39,7 @@ export class AppSyncAuthorizer extends Construct {
             principal: new ServicePrincipal('appsync.amazonaws.com'),
             action: 'lambda:InvokeFunction',
         });
+
+        tenantManagementTable.grantReadData(this.authorizerFunction);
     }
 }

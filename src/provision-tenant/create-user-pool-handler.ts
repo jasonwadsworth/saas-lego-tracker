@@ -76,7 +76,7 @@ export async function createCognitoPool({
         throw new Error('Unable to locate account info.');
     }
 
-    const { graphqlEndpoint } = JSON.parse(ssmResult.Parameter.Value) as { graphqlEndpoint: string };
+    const { graphqlEndpoint, preTokenGenerationArn } = JSON.parse(ssmResult.Parameter.Value) as { graphqlEndpoint: string; preTokenGenerationArn: string };
 
     const cognitoClient = new CognitoIdentityProviderClient({
         credentials,
@@ -98,9 +98,9 @@ export async function createCognitoPool({
                 },
             ],
         },
-        // LambdaConfig: {
-        //     PreTokenGeneration: preTokenGenerationFunctionArn,
-        // },
+        LambdaConfig: {
+            PreTokenGeneration: preTokenGenerationArn,
+        },
         // this has to be done in a separate step in order to make it not support SMS
         // MfaConfiguration: UserPoolMfaType.ON,
         Schema: [
@@ -123,15 +123,15 @@ export async function createCognitoPool({
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const userPoolArn = result.UserPool!.Arn!;
 
-    await cognitoClient.send(
-        new SetUserPoolMfaConfigCommand({
-            UserPoolId: userPoolId,
-            MfaConfiguration: UserPoolMfaType.ON,
-            SoftwareTokenMfaConfiguration: {
-                Enabled: true,
-            },
-        }),
-    );
+    // await cognitoClient.send(
+    //     new SetUserPoolMfaConfigCommand({
+    //         UserPoolId: userPoolId,
+    //         MfaConfiguration: UserPoolMfaType.ON,
+    //         SoftwareTokenMfaConfiguration: {
+    //             Enabled: true,
+    //         },
+    //     }),
+    // );
 
     const appClient = new CreateUserPoolClientCommand({
         ClientName: 'default',
@@ -180,7 +180,7 @@ export async function createCognitoPool({
         new PutCommand({
             Item: {
                 pk: 'JwtValidation',
-                sk: tenantId,
+                sk: `${jwtValidation.audience}|${jwtValidation.issuer}`,
                 ...jwtValidation,
             },
             TableName: 'TenantManagement',

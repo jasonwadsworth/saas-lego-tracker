@@ -6,13 +6,13 @@ const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({}), { marshallO
 export const handler = async (event: APIGatewayProxyEventV2, context: Context): Promise<APIGatewayProxyResultV2> => {
     console.log(event);
 
-    const { host } = event.headers;
+    const { origin } = event.headers;
 
-    if (!host) return { statusCode: 400 };
+    if (!origin) return { statusCode: 400 };
 
     const response = await dynamodb.send(
         new GetCommand({
-            Key: { pk: 'Host', sk: host },
+            Key: { pk: 'Host', sk: origin.replace('https://', '') },
             TableName: process.env.TABLE_NAME,
         }),
     );

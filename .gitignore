@@ -4,6 +4,7 @@
 !*/mutations/**/app-sync-function.js
 !*/queries/**/app-sync-function.js
 !jest.config.js
+!react-app-env.d.ts
 *.d.ts
 node_modules
 
@@ -12,3 +13,5 @@ node_modules
 cdk.out
 
 .DS_Store
+
+.env.local
