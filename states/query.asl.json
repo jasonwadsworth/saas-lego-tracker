@@ -3,6 +3,8 @@
     "States": {
         "passState": {
             "Type": "Pass",
+            "End": true,
+            "Parameters": {"region"},
             "Next": "DynamoDB Query"
         },
         "DynamoDB Query": {

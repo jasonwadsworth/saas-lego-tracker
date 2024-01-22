@@ -12,7 +12,7 @@ export const handler = async (event: APIGatewayProxyEventV2, context: Context): 
 
     const response = await dynamodb.send(
         new GetCommand({
-            Key: { pk: 'Host', sk: origin.replace('https://', '') },
+            Key: { pk: 'Host', sk: origin.replace('https://', '').replace('http://', '') },
             TableName: process.env.TABLE_NAME,
         }),
     );
