@@ -1,4 +1,4 @@
-import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
+import { BootstraplessSynthesizer, CfnOutput, Stack, StackProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { CorsHttpMethod, HttpApi } from 'aws-cdk-lib/aws-apigatewayv2';
 import { AttributeType, Table } from 'aws-cdk-lib/aws-dynamodb';
@@ -21,6 +21,7 @@ import { HostedZone, RecordSet, RecordTarget, RecordType } from 'aws-cdk-lib/aws
 import { Bucket, BucketEncryption, ObjectOwnership } from 'aws-cdk-lib/aws-s3';
 import { CloudFrontTarget } from 'aws-cdk-lib/aws-route53-targets';
 import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment';
+import { TenantStack } from './tenant-stack';
 
 interface Props extends StackProps {
     appCertificateArn: string;
@@ -172,5 +173,9 @@ export class TenantManagementStack extends Stack {
         new TenantInfo(this, 'TenantInfo', { httpApi, table });
 
         new ProvisionTenant(this, 'CreateTenant', { table });
+
+        const tenantStack = new TenantStack(this, 'TenantStack', {
+            synthesizer: new BootstraplessSynthesizer(),
+        });
     }
 }
